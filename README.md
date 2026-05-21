@@ -13,9 +13,16 @@ An employer-ready analytics app for **curtido/recurtido** production that combin
 
 - UI preview: `docs/dashboard-preview.svg`
 - short UI demo GIF: `docs/dashboard-demo.gif`
+- focused MLP interaction GIF: `docs/mlp-prediction-demo.gif`
 - MLP logic diagram: `docs/mlp-pipeline.svg`
 
 ![MLP Pipeline](docs/mlp-pipeline.svg)
+
+## Model Demo (Focused)
+
+The GIF below shows the MLP inference panel before and after running a prediction.
+
+![MLP Prediction Demo](docs/mlp-prediction-demo.gif)
 
 ## Project Context: Curtido vs Recurtido
 
@@ -175,6 +182,7 @@ python mlp_recurtido.py predict --familia "XYZ" --tipo-cuero "ABC" --pzs 220
 ├── docs/
 │   ├── dashboard-demo.gif
 │   ├── dashboard-preview.svg
+│   ├── mlp-prediction-demo.gif
 │   └── mlp-pipeline.svg
 ├── data/
 │   └── .gitkeep
