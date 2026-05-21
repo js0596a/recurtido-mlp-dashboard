@@ -326,6 +326,108 @@ def compute_filter_options(df: pd.DataFrame) -> tuple[pd.Timestamp, pd.Timestamp
     return min_date, max_date, leather_options, family_options, mlp_leather_options
 
 
+def compute_week_options(df: pd.DataFrame) -> tuple[list[dict], str | None]:
+    if df.empty or "SEMANA" not in df.columns:
+        return [], None
+
+    weeks = sorted(pd.to_datetime(df["SEMANA"].dropna().unique()))
+    options = [{"label": pd.Timestamp(week).strftime("%Y-%m-%d"), "value": pd.Timestamp(week).strftime("%Y-%m-%d")} for week in weeks]
+    value = options[-1]["value"] if options else None
+    return options, value
+
+
+def make_mix_waterfall_figure(
+    previous_yield: float,
+    mix_effect: float,
+    execution_effect: float,
+    interaction_effect: float,
+    current_yield: float,
+) -> go.Figure:
+    fig = go.Figure(
+        go.Waterfall(
+            measure=["absolute", "relative", "relative", "relative", "total"],
+            x=["Prev Week", "Mix Effect", "Execution Effect", "Interaction", "Current Week"],
+            y=[previous_yield, mix_effect, execution_effect, interaction_effect, current_yield],
+            connector={"line": {"color": "rgba(100,116,139,0.5)"}},
+            increasing={"marker": {"color": "#22c55e"}},
+            decreasing={"marker": {"color": "#ef4444"}},
+            totals={"marker": {"color": "#0f172a"}},
+        )
+    )
+    fig.update_yaxes(title="Yield (ft2 per piece)")
+    return style_chart(fig, "Why Yield Changed (Week vs Previous Week)")
+
+
+def make_mix_share_figure(merged: pd.DataFrame, prev_label: str, curr_label: str) -> go.Figure:
+    ranked = merged.assign(total_pzs=merged["pzs_prev"] + merged["pzs_curr"]).sort_values("total_pzs", ascending=False).head(10)
+    if ranked.empty:
+        return empty_chart("Family Mix Shift", "Not enough family data to compare weeks.")
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=ranked["FAMILIA"],
+            y=ranked["share_prev"] * 100,
+            name=f"{prev_label} share",
+            marker=dict(color="#94a3b8"),
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            x=ranked["FAMILIA"],
+            y=ranked["share_curr"] * 100,
+            name=f"{curr_label} share",
+            marker=dict(color="#0ea5a4"),
+        )
+    )
+    fig.update_layout(barmode="group")
+    fig.update_xaxes(title="Family")
+    fig.update_yaxes(title="Share of pieces (%)")
+    return style_chart(fig, "Family Mix Shift (Pieces Share)")
+
+
+def make_mix_driver_scatter(merged: pd.DataFrame, previous_yield: float) -> go.Figure:
+    if merged.empty:
+        return empty_chart("Family Impact Map", "No family contribution rows available.")
+
+    point_size = (merged["pzs_curr"].fillna(0) / max(merged["pzs_curr"].max(), 1)) * 34 + 10
+    reference_yield = merged["yield_prev"].where(merged["yield_prev"] > 0, merged["yield_curr"])
+
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=reference_yield,
+                y=merged["share_delta_pct"],
+                mode="markers+text",
+                text=merged["FAMILIA"],
+                textposition="top center",
+                marker=dict(
+                    size=point_size,
+                    color=merged["mix_contrib"],
+                    colorscale=[
+                        [0.0, "#ef4444"],
+                        [0.5, "#f59e0b"],
+                        [1.0, "#22c55e"],
+                    ],
+                    line=dict(width=1, color="rgba(15,23,42,0.22)"),
+                    showscale=True,
+                    colorbar=dict(title="Mix contribution"),
+                ),
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Reference yield: %{x:.2f} ft2/piece<br>"
+                    "Share delta: %{y:.2f} pp<extra></extra>"
+                ),
+            )
+        ]
+    )
+    fig.add_vline(x=previous_yield, line_dash="dash", line_color="#475569")
+    fig.add_hline(y=0, line_dash="dot", line_color="#64748b")
+    fig.update_xaxes(title="Family reference yield (ft2/piece)")
+    fig.update_yaxes(title="Share change (percentage points)")
+    return style_chart(fig, "Family Impact Map (Low-Yield Mix Increase)")
+
+
 try:
     DEFAULT_DF, DEFAULT_SHEET = load_dashboard_data(DEFAULT_DATASET_PATH)
     DEFAULT_DATA_ERROR = None
@@ -569,6 +671,71 @@ app.layout = dmc.MantineProvider(
                         ],
                     ),
                     dmc.Space(h="md"),
+                    dmc.Paper(
+                        className="glass-card",
+                        withBorder=True,
+                        radius="lg",
+                        p="md",
+                        children=[
+                            dmc.Group(
+                                justify="space-between",
+                                align="flex-end",
+                                children=[
+                                    dmc.Stack(
+                                        gap=2,
+                                        children=[
+                                            dmc.Title("Weekly Yield Mix Explainer (Prototype)", order=4),
+                                            dmc.Text(
+                                                "Shows whether yield changed mainly due to family mix (what was processed) or execution (how it was processed).",
+                                                c="dimmed",
+                                                fz="sm",
+                                            ),
+                                        ],
+                                    ),
+                                    dmc.Select(
+                                        id="mix-week-select",
+                                        label="Week to explain",
+                                        w=220,
+                                        data=[],
+                                        placeholder="Select week",
+                                        clearable=False,
+                                    ),
+                                ],
+                            ),
+                            dmc.Space(h="sm"),
+                            dmc.SimpleGrid(
+                                cols={"base": 1, "sm": 2, "md": 3, "lg": 6},
+                                spacing="md",
+                                children=[
+                                    kpi_card("Previous Yield", "mix-kpi-prev"),
+                                    kpi_card("Current Yield", "mix-kpi-current"),
+                                    kpi_card("Delta Yield", "mix-kpi-delta"),
+                                    kpi_card("Mix Effect", "mix-kpi-mix"),
+                                    kpi_card("Execution Effect", "mix-kpi-exec"),
+                                    kpi_card("Interaction", "mix-kpi-interaction"),
+                                ],
+                            ),
+                            dmc.Space(h="md"),
+                            dmc.SimpleGrid(
+                                cols={"base": 1, "lg": 2},
+                                spacing="md",
+                                children=[
+                                    dcc.Graph(id="mix-waterfall", config={"displayModeBar": False}),
+                                    dcc.Graph(id="mix-share-chart", config={"displayModeBar": False}),
+                                ],
+                            ),
+                            dmc.Space(h="md"),
+                            dcc.Graph(id="mix-driver-chart", config={"displayModeBar": False}),
+                            dmc.Space(h="xs"),
+                            dmc.Alert(
+                                id="mix-narrative",
+                                color="blue",
+                                variant="light",
+                                children="Upload data and select a week to explain yield movement.",
+                            ),
+                        ],
+                    ),
+                    dmc.Space(h="md"),
                     dmc.Grid(
                         gutter="md",
                         children=[
@@ -716,6 +883,8 @@ def handle_dataset_upload(contents, _reset_clicks, filename, current_data):
     Output("mlp-familia", "value"),
     Output("mlp-tipo-cuero", "data"),
     Output("mlp-tipo-cuero", "value"),
+    Output("mix-week-select", "data"),
+    Output("mix-week-select", "value"),
     Input("dataset-store", "data"),
     Input("dataset-meta", "data"),
 )
@@ -724,6 +893,7 @@ def sync_ui_to_dataset(dataset_json, dataset_meta):
     meta = dataset_meta or {}
 
     min_dt, max_dt, leather_opts, family_opts, mlp_leather_opts = compute_filter_options(df)
+    week_opts, week_value = compute_week_options(df)
     date_value = [min_dt.date().isoformat(), max_dt.date().isoformat()]
 
     alert_message = meta.get("message") or "Upload a dataset to start."
@@ -756,6 +926,8 @@ def sync_ui_to_dataset(dataset_json, dataset_meta):
         family_value,
         mlp_leather_opts,
         mlp_leather_value,
+        week_opts,
+        week_value,
     )
 
 
@@ -890,6 +1062,233 @@ def update_dashboard(dataset_json, date_range, selected_tipo, min_pzs):
         weekly_fig,
         family_fig,
         leather_fig,
+    )
+
+
+@app.callback(
+    Output("mix-kpi-prev", "children"),
+    Output("mix-kpi-current", "children"),
+    Output("mix-kpi-delta", "children"),
+    Output("mix-kpi-mix", "children"),
+    Output("mix-kpi-exec", "children"),
+    Output("mix-kpi-interaction", "children"),
+    Output("mix-waterfall", "figure"),
+    Output("mix-share-chart", "figure"),
+    Output("mix-driver-chart", "figure"),
+    Output("mix-narrative", "children"),
+    Output("mix-narrative", "color"),
+    Input("dataset-store", "data"),
+    Input("date-range", "value"),
+    Input("tipo-cuero-select", "value"),
+    Input("min-pzs", "value"),
+    Input("mix-week-select", "value"),
+)
+def update_mix_explainer(dataset_json, date_range, selected_tipo, min_pzs, mix_week):
+    df = deserialize_df(dataset_json)
+
+    fallback_fig = empty_chart("Yield Mix Explainer", "Need at least two weeks of data for this analysis.")
+    if df.empty:
+        return (
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            fallback_fig,
+            fallback_fig,
+            fallback_fig,
+            "Carga un dataset para activar esta sección.",
+            "gray",
+        )
+
+    if date_range and len(date_range) == 2 and date_range[0] and date_range[1]:
+        start_date = pd.to_datetime(date_range[0])
+        end_date = pd.to_datetime(date_range[1])
+    else:
+        start_date = df["FECHA"].min()
+        end_date = df["FECHA"].max()
+
+    if end_date < start_date:
+        start_date, end_date = end_date, start_date
+
+    selected_tipo = selected_tipo or "ALL"
+    filtered = df[(df["FECHA"] >= start_date) & (df["FECHA"] <= end_date)].copy()
+    if selected_tipo != "ALL":
+        filtered = filtered[filtered["TIPO DE CUERO"] == selected_tipo].copy()
+
+    if filtered.empty:
+        return (
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            fallback_fig,
+            fallback_fig,
+            fallback_fig,
+            "No hay datos para ese filtro de fecha/cuero.",
+            "yellow",
+        )
+
+    family_week = (
+        filtered.groupby(["SEMANA", "FAMILIA"], as_index=False)
+        .agg(area=("AREA TOTAL (ft2)", "sum"), pzs=("PZS", "sum"))
+    )
+    family_week = family_week[family_week["pzs"] > 0].copy()
+    family_week["yield"] = family_week["area"] / family_week["pzs"]
+
+    threshold = max(float(min_pzs or 0), 0)
+    if threshold > 0:
+        threshold_slice = family_week[family_week["pzs"] >= threshold].copy()
+        if not threshold_slice.empty:
+            family_week = threshold_slice
+
+    week_values = sorted(pd.to_datetime(family_week["SEMANA"].dropna().unique()))
+    if len(week_values) < 2:
+        return (
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            fallback_fig,
+            fallback_fig,
+            fallback_fig,
+            "Necesitas al menos dos semanas con familias válidas para comparar rendimiento.",
+            "yellow",
+        )
+
+    focus_week = pd.to_datetime(mix_week) if mix_week else week_values[-1]
+    focus_week = pd.Timestamp(focus_week).normalize()
+    week_map = {pd.Timestamp(w).normalize(): pd.Timestamp(w) for w in week_values}
+    if focus_week not in week_map:
+        focus_week = pd.Timestamp(week_values[-1]).normalize()
+
+    ordered_norm = [pd.Timestamp(w).normalize() for w in week_values]
+    focus_idx = ordered_norm.index(focus_week)
+    if focus_idx == 0:
+        return (
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            fallback_fig,
+            fallback_fig,
+            fallback_fig,
+            "Selecciona una semana que tenga semana previa dentro del filtro.",
+            "yellow",
+        )
+
+    curr_week = pd.Timestamp(week_values[focus_idx])
+    prev_week = pd.Timestamp(week_values[focus_idx - 1])
+
+    curr_rows = family_week[family_week["SEMANA"] == curr_week][["FAMILIA", "area", "pzs", "yield"]].rename(
+        columns={"area": "area_curr", "pzs": "pzs_curr", "yield": "yield_curr"}
+    )
+    prev_rows = family_week[family_week["SEMANA"] == prev_week][["FAMILIA", "area", "pzs", "yield"]].rename(
+        columns={"area": "area_prev", "pzs": "pzs_prev", "yield": "yield_prev"}
+    )
+
+    merged = prev_rows.merge(curr_rows, on="FAMILIA", how="outer").fillna(0)
+
+    prev_total_pzs = float(merged["pzs_prev"].sum())
+    curr_total_pzs = float(merged["pzs_curr"].sum())
+    prev_total_area = float(merged["area_prev"].sum())
+    curr_total_area = float(merged["area_curr"].sum())
+
+    if prev_total_pzs <= 0 or curr_total_pzs <= 0:
+        return (
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            "N/A",
+            fallback_fig,
+            fallback_fig,
+            fallback_fig,
+            "Una de las semanas tiene piezas en cero; no se puede descomponer rendimiento.",
+            "yellow",
+        )
+
+    merged["share_prev"] = merged["pzs_prev"] / prev_total_pzs
+    merged["share_curr"] = merged["pzs_curr"] / curr_total_pzs
+    merged["share_delta"] = merged["share_curr"] - merged["share_prev"]
+    merged["share_delta_pct"] = merged["share_delta"] * 100
+    merged["mix_contrib"] = merged["share_delta"] * merged["yield_prev"]
+    merged["exec_contrib"] = merged["share_prev"] * (merged["yield_curr"] - merged["yield_prev"])
+    merged["interaction_contrib"] = merged["share_delta"] * (merged["yield_curr"] - merged["yield_prev"])
+
+    previous_yield = prev_total_area / prev_total_pzs
+    current_yield = curr_total_area / curr_total_pzs
+    delta_yield = current_yield - previous_yield
+    mix_effect = float(merged["mix_contrib"].sum())
+    execution_effect = float(merged["exec_contrib"].sum())
+    interaction_effect = float(merged["interaction_contrib"].sum())
+
+    curr_label = curr_week.strftime("%Y-%m-%d")
+    prev_label = prev_week.strftime("%Y-%m-%d")
+
+    waterfall_fig = make_mix_waterfall_figure(
+        previous_yield=previous_yield,
+        mix_effect=mix_effect,
+        execution_effect=execution_effect,
+        interaction_effect=interaction_effect,
+        current_yield=current_yield,
+    )
+    share_fig = make_mix_share_figure(merged=merged, prev_label=prev_label, curr_label=curr_label)
+    driver_fig = make_mix_driver_scatter(merged=merged, previous_yield=previous_yield)
+
+    negative_mix = merged.sort_values("mix_contrib").head(3)
+    negative_mix = negative_mix[negative_mix["mix_contrib"] < 0]
+    if negative_mix.empty:
+        drivers = "No major negative family-mix drivers this week."
+    else:
+        drivers = ", ".join(
+            f"{row.FAMILIA} ({row.mix_contrib:.3f})"
+            for row in negative_mix.itertuples()
+        )
+
+    if mix_effect < 0 and abs(mix_effect) > abs(execution_effect):
+        headline = (
+            f"Semana {curr_label} vs {prev_label}: el rendimiento bajó principalmente por mezcla de familias "
+            "(entraron más familias de bajo rendimiento)."
+        )
+        color = "red"
+    elif execution_effect < 0 and abs(execution_effect) > abs(mix_effect):
+        headline = (
+            f"Semana {curr_label} vs {prev_label}: la caída se explica más por ejecución dentro de familias "
+            "que por mezcla."
+        )
+        color = "orange"
+    else:
+        headline = (
+            f"Semana {curr_label} vs {prev_label}: el efecto es mixto entre composición de familias y ejecución."
+        )
+        color = "blue"
+
+    narrative = (
+        f"{headline} Drivers negativos de mezcla: {drivers}. "
+        f"ΔYield={delta_yield:+.3f}, Mix={mix_effect:+.3f}, Execution={execution_effect:+.3f}, Interaction={interaction_effect:+.3f}."
+    )
+
+    return (
+        f"{previous_yield:,.3f} ft2/piece",
+        f"{current_yield:,.3f} ft2/piece",
+        f"{delta_yield:+,.3f}",
+        f"{mix_effect:+,.3f}",
+        f"{execution_effect:+,.3f}",
+        f"{interaction_effect:+,.3f}",
+        waterfall_fig,
+        share_fig,
+        driver_fig,
+        narrative,
+        color,
     )
 
 
