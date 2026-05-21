@@ -1,0 +1,73 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFEFF"/>
+      <stop offset="1" stop-color="#FFF7ED"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0EA5A4"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1280" height="720" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#0F172A" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <circle cx="130" cy="60" r="220" fill="#14B8A6" opacity="0.2"/>
+  <circle cx="1210" cy="130" r="270" fill="#3B82F6" opacity="0.18"/>
+  <circle cx="460" cy="760" r="260" fill="#F59E0B" opacity="0.15"/>
+
+  <rect x="48" y="44" width="1184" height="632" rx="26" fill="#FFFFFF" fill-opacity="0.82" stroke="#DCE3EA" filter="url(#shadow)"/>
+
+  <rect x="80" y="74" width="1120" height="120" rx="18" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="108" y="112" fill="#0D9488" font-size="18" font-family="Arial, sans-serif" font-weight="700">Curtido / Recurtido Operations</text>
+  <text x="108" y="148" fill="#0F172A" font-size="36" font-family="Arial, sans-serif" font-weight="700">Recurtido Analytics + MLP Forecast</text>
+  <text x="108" y="174" fill="#475569" font-size="18" font-family="Arial, sans-serif">Production monitoring + neural forecasting workflow</text>
+
+  <rect x="80" y="214" width="220" height="96" rx="12" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="98" y="240" fill="#64748B" font-size="12" font-family="Arial, sans-serif">TOP FAMILY</text>
+  <text x="98" y="272" fill="#0F172A" font-size="24" font-family="Arial, sans-serif" font-weight="700">CABALLERIA</text>
+
+  <rect x="314" y="214" width="220" height="96" rx="12" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="332" y="240" fill="#64748B" font-size="12" font-family="Arial, sans-serif">TOP YIELD</text>
+  <text x="332" y="272" fill="#0F172A" font-size="24" font-family="Arial, sans-serif" font-weight="700">15.82 ft2/pz</text>
+
+  <rect x="548" y="214" width="220" height="96" rx="12" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="566" y="240" fill="#64748B" font-size="12" font-family="Arial, sans-serif">TOTAL AREA</text>
+  <text x="566" y="272" fill="#0F172A" font-size="24" font-family="Arial, sans-serif" font-weight="700">1,248,430 ft2</text>
+
+  <rect x="782" y="214" width="220" height="96" rx="12" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="800" y="240" fill="#64748B" font-size="12" font-family="Arial, sans-serif">TOTAL PZS</text>
+  <text x="800" y="272" fill="#0F172A" font-size="24" font-family="Arial, sans-serif" font-weight="700">80,612</text>
+
+  <rect x="1016" y="214" width="184" height="96" rx="12" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text x="1034" y="240" fill="#0F766E" font-size="12" font-family="Arial, sans-serif">MLP STATUS</text>
+  <text x="1034" y="272" fill="#0F172A" font-size="22" font-family="Arial, sans-serif" font-weight="700">R2 = 0.91</text>
+
+  <rect x="80" y="328" width="310" height="316" rx="14" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="102" y="358" fill="#0F172A" font-size="18" font-family="Arial, sans-serif" font-weight="700">Filters</text>
+  <rect x="102" y="376" width="266" height="44" rx="8" fill="#F8FAFC" stroke="#DDE7EF"/>
+  <text x="116" y="403" fill="#475569" font-size="14" font-family="Arial, sans-serif">Date range</text>
+  <rect x="102" y="434" width="266" height="44" rx="8" fill="#F8FAFC" stroke="#DDE7EF"/>
+  <text x="116" y="461" fill="#475569" font-size="14" font-family="Arial, sans-serif">Leather type</text>
+  <rect x="102" y="492" width="266" height="44" rx="8" fill="#F8FAFC" stroke="#DDE7EF"/>
+  <text x="116" y="519" fill="#475569" font-size="14" font-family="Arial, sans-serif">Min PZS</text>
+
+  <rect x="404" y="328" width="796" height="202" rx="14" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="426" y="358" fill="#0F172A" font-size="18" font-family="Arial, sans-serif" font-weight="700">Weekly Total Area</text>
+  <polyline points="430,500 510,470 590,480 670,430 750,410 830,390 910,365 990,350 1070,330 1150,310" fill="none" stroke="#0EA5A4" stroke-width="4"/>
+  <polygon points="430,500 1150,310 1150,500" fill="url(#accent)" opacity="0.14"/>
+
+  <rect x="404" y="542" width="390" height="102" rx="14" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="426" y="570" fill="#0F172A" font-size="16" font-family="Arial, sans-serif" font-weight="700">Top Families by Yield</text>
+  <rect x="430" y="582" width="230" height="10" rx="5" fill="#06B6D4"/>
+  <rect x="430" y="600" width="195" height="10" rx="5" fill="#22D3EE"/>
+  <rect x="430" y="618" width="168" height="10" rx="5" fill="#67E8F9"/>
+
+  <rect x="810" y="542" width="390" height="102" rx="14" fill="#FFFFFF" stroke="#DDE7EF"/>
+  <text x="832" y="570" fill="#0F172A" font-size="16" font-family="Arial, sans-serif" font-weight="700">MLP Prediction Output</text>
+  <text x="832" y="598" fill="#0D9488" font-size="22" font-family="Arial, sans-serif" font-weight="700">Predicted area: 3,282.41 ft2</text>
+  <text x="832" y="622" fill="#475569" font-size="14" font-family="Arial, sans-serif">Predicted yield: 14.92 ft2/piece</text>
+</svg>

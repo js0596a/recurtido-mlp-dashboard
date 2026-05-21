@@ -1,0 +1,47 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="step" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0EA5A4"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="320" fill="#F8FAFC"/>
+  <text x="40" y="42" fill="#0F172A" font-size="28" font-family="Arial, sans-serif" font-weight="700">MLP Training Pipeline (Curtido / Recurtido)</text>
+
+  <rect x="40" y="80" width="150" height="84" rx="14" fill="url(#step)"/>
+  <text x="58" y="113" fill="#FFFFFF" font-size="14" font-family="Arial, sans-serif" font-weight="700">1) Load Excel</text>
+  <text x="58" y="132" fill="#E2E8F0" font-size="12" font-family="Arial, sans-serif">Auto-detect sheet</text>
+
+  <path d="M200 122 H230" stroke="#64748B" stroke-width="3"/>
+  <polygon points="230,122 220,116 220,128" fill="#64748B"/>
+
+  <rect x="240" y="80" width="160" height="84" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="258" y="113" fill="#0F172A" font-size="14" font-family="Arial, sans-serif" font-weight="700">2) Clean Data</text>
+  <text x="258" y="132" fill="#475569" font-size="12" font-family="Arial, sans-serif">Normalize + filter</text>
+
+  <path d="M410 122 H440" stroke="#64748B" stroke-width="3"/>
+  <polygon points="440,122 430,116 430,128" fill="#64748B"/>
+
+  <rect x="450" y="80" width="180" height="84" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="468" y="113" fill="#0F172A" font-size="14" font-family="Arial, sans-serif" font-weight="700">3) Preprocess</text>
+  <text x="468" y="132" fill="#475569" font-size="12" font-family="Arial, sans-serif">OHE + scaling</text>
+
+  <path d="M640 122 H670" stroke="#64748B" stroke-width="3"/>
+  <polygon points="670,122 660,116 660,128" fill="#64748B"/>
+
+  <rect x="680" y="80" width="180" height="84" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="698" y="113" fill="#0F172A" font-size="14" font-family="Arial, sans-serif" font-weight="700">4) Train MLP</text>
+  <text x="698" y="132" fill="#475569" font-size="12" font-family="Arial, sans-serif">Dense + callbacks</text>
+
+  <path d="M870 122 H900" stroke="#64748B" stroke-width="3"/>
+  <polygon points="900,122 890,116 890,128" fill="#64748B"/>
+
+  <rect x="910" y="80" width="220" height="84" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="928" y="113" fill="#0F172A" font-size="14" font-family="Arial, sans-serif" font-weight="700">5) Evaluate + Save</text>
+  <text x="928" y="132" fill="#475569" font-size="12" font-family="Arial, sans-serif">MAE/RMSE/MAPE/R2 + artifacts</text>
+
+  <rect x="40" y="196" width="1090" height="90" rx="14" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="62" y="227" fill="#0F172A" font-size="16" font-family="Arial, sans-serif" font-weight="700">Inference Path</text>
+  <text x="62" y="249" fill="#334155" font-size="13" font-family="Arial, sans-serif">User inputs (FAMILIA, TIPO DE CUERO, PZS) -> saved preprocessor -> trained model -> inverse scale target -> predicted AREA TOTAL and yield.</text>
+</svg>
