@@ -4,10 +4,15 @@ from pathlib import Path
 import os
 
 import dash
-from dash import Input, Output, State, dcc
+from dash import Input, Output, State, dcc, html
 import dash_mantine_components as dmc
 import pandas as pd
 import plotly.graph_objects as go
+
+try:
+    import joblib
+except Exception:  # pragma: no cover
+    joblib = None
 
 try:
     from mlp_recurtido import predict_area_total
@@ -21,7 +26,8 @@ BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = Path(os.getenv("RECURTIDO_EXCEL_PATH", BASE_DIR / "data" / "datosProd.xlsx"))
 PREFERRED_SHEET = os.getenv("RECURTIDO_SHEET_NAME", "RECURTIDO")
 REPO_URL = "https://github.com/js0596a/recurtido-mlp-dashboard"
-REQUIRED_DASHBOARD_COLUMNS = ["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)"]
+REQUIRED_COLUMNS = ["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)"]
+METRICS_PATH = BASE_DIR / "artifacts" / "recurtido_metrics.joblib"
 
 
 def fix_excel_date(column: pd.Series) -> pd.Series:
@@ -35,45 +41,41 @@ def fix_excel_date(column: pd.Series) -> pd.Series:
     return pd.to_datetime(column, errors="coerce")
 
 
-def load_dashboard_data(excel_path: Path) -> pd.DataFrame:
+def select_sheet_with_columns(excel_path: Path, preferred_sheet: str) -> tuple[pd.DataFrame, str]:
+    try:
+        workbook = pd.ExcelFile(excel_path)
+    except ImportError as exc:
+        raise ImportError(
+            "Reading .xlsx requires 'openpyxl'. Install dependencies with: pip install -r requirements.txt"
+        ) from exc
+
+    sheet_names = workbook.sheet_names
+    candidates = [preferred_sheet] + [name for name in sheet_names if name != preferred_sheet]
+
+    for sheet in candidates:
+        if sheet not in sheet_names:
+            continue
+        candidate_df = pd.read_excel(excel_path, sheet_name=sheet)
+        candidate_df.columns = candidate_df.columns.str.strip()
+        if all(col in candidate_df.columns for col in REQUIRED_COLUMNS):
+            return candidate_df, sheet
+
+    raise ValueError(
+        "No worksheet contains required columns "
+        f"{REQUIRED_COLUMNS}. Available sheets: {sheet_names}"
+    )
+
+
+def load_dashboard_data(excel_path: Path) -> tuple[pd.DataFrame, str]:
     if not excel_path.exists():
         raise FileNotFoundError(
             f"Excel file not found at {excel_path}. "
             "Set RECURTIDO_EXCEL_PATH to your local dataset path."
         )
 
-    try:
-        excel_book = pd.ExcelFile(excel_path)
-    except ImportError as exc:
-        raise ImportError(
-            "Reading .xlsx requires 'openpyxl'. Install dependencies with: pip install -r requirements.txt"
-        ) from exc
-    sheet_names = excel_book.sheet_names
-    candidate_sheets = [PREFERRED_SHEET] + [name for name in sheet_names if name != PREFERRED_SHEET]
+    raw_df, selected_sheet = select_sheet_with_columns(excel_path, PREFERRED_SHEET)
 
-    selected_sheet = None
-    raw_df = None
-    for sheet in candidate_sheets:
-        if sheet not in sheet_names:
-            continue
-        candidate_df = pd.read_excel(excel_path, sheet_name=sheet)
-        candidate_df.columns = candidate_df.columns.str.strip()
-        if all(col in candidate_df.columns for col in REQUIRED_DASHBOARD_COLUMNS):
-            selected_sheet = sheet
-            raw_df = candidate_df
-            break
-
-    if raw_df is None:
-        raise ValueError(
-            "No worksheet contains required columns "
-            f"{REQUIRED_DASHBOARD_COLUMNS}. Available sheets: {sheet_names}"
-        )
-
-    missing = [col for col in REQUIRED_DASHBOARD_COLUMNS if col not in raw_df.columns]
-    if missing:
-        raise ValueError(f"Missing columns in selected sheet '{selected_sheet}': {missing}")
-
-    df = raw_df[REQUIRED_DASHBOARD_COLUMNS].copy()
+    df = raw_df[REQUIRED_COLUMNS].copy()
     df["FECHA"] = fix_excel_date(df["FECHA"])
 
     df["TIPO DE CUERO"] = df["TIPO DE CUERO"].astype(str).str.strip().str.upper()
@@ -90,8 +92,19 @@ def load_dashboard_data(excel_path: Path) -> pd.DataFrame:
     df = df[(df["PZS"] > 0) & (df["AREA TOTAL (ft2)"] > 0)].copy()
     df["SEMANA"] = df["FECHA"].dt.to_period("W").dt.start_time
 
-    df.attrs["selected_sheet"] = selected_sheet
-    return df
+    return df, selected_sheet
+
+
+def load_saved_metrics() -> dict | None:
+    if joblib is None:
+        return None
+    if not METRICS_PATH.exists():
+        return None
+    try:
+        metrics = joblib.load(METRICS_PATH)
+        return metrics if isinstance(metrics, dict) else None
+    except Exception:
+        return None
 
 
 def empty_chart(title: str, message: str) -> go.Figure:
@@ -103,201 +116,321 @@ def empty_chart(title: str, message: str) -> go.Figure:
         xref="paper",
         yref="paper",
         showarrow=False,
-        font=dict(size=14, color="#5c6670"),
+        font=dict(size=14, color="#64748b"),
     )
     fig.update_layout(
-        title=title,
+        title=dict(text=title, x=0.01, xanchor="left"),
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        margin=dict(l=20, r=20, t=50, b=20),
+        margin=dict(l=18, r=18, t=48, b=18),
+        paper_bgcolor="rgba(255,255,255,0)",
+        plot_bgcolor="rgba(255,255,255,0)",
     )
     return fig
 
 
 def style_chart(fig: go.Figure, title: str) -> go.Figure:
     fig.update_layout(
-        title=title,
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        margin=dict(l=20, r=20, t=50, b=20),
+        title=dict(text=title, x=0.01, xanchor="left"),
+        margin=dict(l=18, r=18, t=48, b=18),
         hovermode="x unified",
+        paper_bgcolor="rgba(255,255,255,0)",
+        plot_bgcolor="rgba(255,255,255,0)",
+        font=dict(family="'Space Grotesk', Inter, sans-serif", color="#0f172a"),
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(0,0,0,0.08)")
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.08)")
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(148,163,184,0.25)", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.25)", zeroline=False)
     return fig
 
 
+def make_mlp_model_badge(metrics: dict | None) -> dmc.Badge:
+    if metrics:
+        return dmc.Badge(
+            f"MLP trained (R2 {metrics.get('r2', 0):.3f})",
+            color="teal",
+            variant="light",
+            radius="sm",
+        )
+    return dmc.Badge("MLP not trained yet", color="orange", variant="light", radius="sm")
+
+
 try:
-    DF = load_dashboard_data(EXCEL_PATH)
-    SELECTED_SHEET = DF.attrs.get("selected_sheet", PREFERRED_SHEET)
+    DF, SELECTED_SHEET = load_dashboard_data(EXCEL_PATH)
     DATA_LOAD_ERROR = None
 except Exception as exc:
-    DF = pd.DataFrame(columns=["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)", "SEMANA"])
+    DF = pd.DataFrame(columns=REQUIRED_COLUMNS + ["SEMANA"])
     SELECTED_SHEET = None
     DATA_LOAD_ERROR = str(exc)
 
 
+MODEL_METRICS = load_saved_metrics()
+
 if DF.empty:
     min_date = pd.Timestamp.today().normalize()
     max_date = pd.Timestamp.today().normalize()
-    tipo_cuero_options = ["TODOS"]
-    familia_options = ["SIN DATOS"]
-    mlp_tipo_cuero_options = ["SIN DATOS"]
+    tipo_cuero_options = ["ALL"]
+    familia_options = ["NO DATA"]
+    mlp_tipo_cuero_options = ["NO DATA"]
 else:
     min_date = DF["FECHA"].min()
     max_date = DF["FECHA"].max()
-    tipo_cuero_options = ["TODOS"] + sorted(DF["TIPO DE CUERO"].dropna().unique())
+    tipo_cuero_options = ["ALL"] + sorted(DF["TIPO DE CUERO"].dropna().unique())
     familia_options = sorted(DF["FAMILIA"].dropna().unique())
     mlp_tipo_cuero_options = sorted(DF["TIPO DE CUERO"].dropna().unique())
 
 
+def kpi_card(label: str, value_id: str) -> dmc.Paper:
+    return dmc.Paper(
+        className="kpi-card",
+        withBorder=True,
+        radius="lg",
+        p="md",
+        children=[
+            dmc.Text(label, c="dimmed", fz="xs", tt="uppercase", fw=600),
+            dmc.Title(id=value_id, order=3),
+        ],
+    )
+
+
 app = dash.Dash(__name__)
-app.title = "Recurtido MLP Dashboard"
+app.title = "Curtido/Recurtido MLP Dashboard"
 
 
 app.layout = dmc.MantineProvider(
-    theme={"primaryColor": "teal", "fontFamily": "Inter, sans-serif"},
-    children=[
-        dmc.Container(
-            fluid=True,
-            p="md",
-            children=[
-                dmc.Group(
-                    justify="space-between",
-                    children=[
-                        dmc.Stack(
-                            gap=0,
-                            children=[
-                                dmc.Title("Recurtido Analytics + MLP", order=2),
-                                dmc.Text(
-                                    "Production analytics dashboard with an MLP forecast workflow.",
-                                    c="dimmed",
-                                ),
-                            ],
-                        ),
-                        dmc.Anchor("GitHub Repo", href=REPO_URL, target="_blank"),
-                    ],
-                ),
-                dmc.Space(h="md"),
-                dmc.Alert(
-                    DATA_LOAD_ERROR
-                    if DATA_LOAD_ERROR
-                    else f"Loaded dataset from: {EXCEL_PATH} (sheet: {SELECTED_SHEET})",
-                    color="red" if DATA_LOAD_ERROR else "teal",
-                    variant="light",
-                ),
-                dmc.Space(h="md"),
-                dmc.SimpleGrid(
-                    cols={"base": 1, "sm": 2, "lg": 5},
-                    spacing="md",
-                    children=[
-                        dmc.Paper([dmc.Text("Best family", c="dimmed", fz="sm"), dmc.Title(id="card-familia", order=4)], p="md", withBorder=True),
-                        dmc.Paper([dmc.Text("Yield", c="dimmed", fz="sm"), dmc.Title(id="card-rendimiento", order=4)], p="md", withBorder=True),
-                        dmc.Paper([dmc.Text("Top leather type", c="dimmed", fz="sm"), dmc.Title(id="card-cuero", order=4)], p="md", withBorder=True),
-                        dmc.Paper([dmc.Text("Total area", c="dimmed", fz="sm"), dmc.Title(id="card-area", order=4)], p="md", withBorder=True),
-                        dmc.Paper([dmc.Text("Total PZS", c="dimmed", fz="sm"), dmc.Title(id="card-pzs", order=4)], p="md", withBorder=True),
-                    ],
-                ),
-                dmc.Space(h="md"),
-                dmc.Grid(
-                    children=[
-                        dmc.GridCol(
-                            span={"base": 12, "md": 3},
-                            children=dmc.Paper(
-                                withBorder=True,
-                                p="md",
+    theme={
+        "primaryColor": "teal",
+        "defaultRadius": "md",
+        "fontFamily": "Space Grotesk, Inter, sans-serif",
+    },
+    children=html.Div(
+        className="app-shell",
+        children=[
+            html.Div(className="orb orb-a"),
+            html.Div(className="orb orb-b"),
+            html.Div(className="orb orb-c"),
+            dmc.Container(
+                size="xl",
+                className="page",
+                children=[
+                    dmc.Paper(
+                        className="hero-panel",
+                        withBorder=True,
+                        radius="xl",
+                        p="xl",
+                        children=[
+                            dmc.Group(
+                                justify="space-between",
+                                align="flex-start",
                                 children=[
-                                    dmc.Title("Filters", order=4),
-                                    dmc.Space(h="sm"),
-                                    dmc.DatePickerInput(
-                                        id="date-range",
-                                        label="Date range",
-                                        type="range",
-                                        value=[min_date.date().isoformat(), max_date.date().isoformat()],
-                                        minDate=min_date.date().isoformat(),
-                                        maxDate=max_date.date().isoformat(),
-                                        valueFormat="YYYY-MM-DD",
-                                        numberOfColumns=2,
-                                        w="100%",
-                                    ),
-                                    dmc.Space(h="sm"),
-                                    dmc.Select(
-                                        id="tipo-cuero-select",
-                                        label="Tipo de cuero",
-                                        value="TODOS",
-                                        data=tipo_cuero_options,
-                                        searchable=True,
-                                    ),
-                                    dmc.Space(h="sm"),
-                                    dmc.NumberInput(
-                                        id="min-pzs",
-                                        label="Min PZS for family ranking",
-                                        value=100,
-                                        min=0,
-                                    ),
-                                ],
-                            ),
-                        ),
-                        dmc.GridCol(
-                            span={"base": 12, "md": 9},
-                            children=dmc.Paper(withBorder=True, p="md", children=dcc.Graph(id="weekly-area-chart")),
-                        ),
-                    ]
-                ),
-                dmc.Space(h="md"),
-                dmc.SimpleGrid(
-                    cols={"base": 1, "md": 2},
-                    spacing="md",
-                    children=[
-                        dmc.Paper(withBorder=True, p="md", children=dcc.Graph(id="familia-chart")),
-                        dmc.Paper(withBorder=True, p="md", children=dcc.Graph(id="cuero-chart")),
-                    ],
-                ),
-                dmc.Space(h="md"),
-                dmc.Grid(
-                    children=[
-                        dmc.GridCol(
-                            span={"base": 12, "md": 4},
-                            children=dmc.Paper(
-                                withBorder=True,
-                                p="md",
-                                children=[
-                                    dmc.Title("MLP Forecast", order=4),
-                                    dmc.Text("Predict AREA TOTAL (ft2) from family, leather type, and PZS.", c="dimmed", fz="sm"),
-                                    dmc.Space(h="sm"),
-                                    dmc.Select(id="mlp-familia", label="Familia", value=familia_options[0], data=familia_options, searchable=True),
-                                    dmc.Space(h="sm"),
-                                    dmc.Select(id="mlp-tipo-cuero", label="Tipo de cuero", value=mlp_tipo_cuero_options[0], data=mlp_tipo_cuero_options, searchable=True),
-                                    dmc.Space(h="sm"),
-                                    dmc.NumberInput(id="mlp-pzs", label="PZS", value=220, min=1),
-                                    dmc.Space(h="sm"),
-                                    dmc.Button("Run prediction", id="mlp-button", fullWidth=True),
-                                ],
-                            ),
-                        ),
-                        dmc.GridCol(
-                            span={"base": 12, "md": 8},
-                            children=dmc.Paper(
-                                withBorder=True,
-                                p="md",
-                                children=[
-                                    dmc.Title("Prediction Output", order=4),
-                                    dmc.Space(h="sm"),
                                     dmc.Stack(
-                                        [dmc.Text("Click Run prediction to evaluate the trained model.")],
-                                        id="mlp-result",
+                                        gap=2,
+                                        children=[
+                                            dmc.Badge(
+                                                "Curtido / Recurtido Operations",
+                                                variant="gradient",
+                                                gradient={"from": "teal", "to": "cyan", "deg": 45},
+                                            ),
+                                            dmc.Title("Recurtido Analytics + MLP Forecast", order=1),
+                                            dmc.Text(
+                                                "Production dashboard with model-based area prediction from family, leather type, and piece count.",
+                                                c="dimmed",
+                                            ),
+                                        ],
+                                    ),
+                                    dmc.Group(
                                         gap="xs",
+                                        children=[
+                                            dmc.Anchor("GitHub", href=REPO_URL, target="_blank"),
+                                            make_mlp_model_badge(MODEL_METRICS),
+                                        ],
                                     ),
                                 ],
                             ),
-                        ),
-                    ]
-                ),
-            ],
-        )
-    ],
+                            dmc.Space(h="md"),
+                            dmc.Group(
+                                gap="sm",
+                                children=[
+                                    dmc.Badge(
+                                        "Dataset ready" if not DATA_LOAD_ERROR else "Dataset not loaded",
+                                        color="teal" if not DATA_LOAD_ERROR else "red",
+                                        variant="light",
+                                    ),
+                                    dmc.Badge(
+                                        f"Sheet: {SELECTED_SHEET}" if SELECTED_SHEET else "Sheet: n/a",
+                                        color="gray",
+                                        variant="outline",
+                                    ),
+                                    dmc.Badge(
+                                        f"Rows: {len(DF):,}" if not DF.empty else "Rows: 0",
+                                        color="gray",
+                                        variant="outline",
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                    dmc.Space(h="md"),
+                    dmc.Alert(
+                        DATA_LOAD_ERROR
+                        if DATA_LOAD_ERROR
+                        else f"Loaded data from {EXCEL_PATH}",
+                        color="red" if DATA_LOAD_ERROR else "teal",
+                        variant="light",
+                    ),
+                    dmc.Space(h="md"),
+                    dmc.SimpleGrid(
+                        cols={"base": 1, "sm": 2, "md": 3, "lg": 5},
+                        spacing="md",
+                        children=[
+                            kpi_card("Top Family", "card-familia"),
+                            kpi_card("Top Yield", "card-rendimiento"),
+                            kpi_card("Top Leather Type", "card-cuero"),
+                            kpi_card("Total Area", "card-area"),
+                            kpi_card("Total PZS", "card-pzs"),
+                        ],
+                    ),
+                    dmc.Space(h="md"),
+                    dmc.Grid(
+                        gutter="md",
+                        children=[
+                            dmc.GridCol(
+                                span={"base": 12, "md": 3},
+                                children=dmc.Paper(
+                                    className="glass-card",
+                                    withBorder=True,
+                                    radius="lg",
+                                    p="md",
+                                    children=[
+                                        dmc.Title("Filters", order=4),
+                                        dmc.Text("Control what you see in charts and KPIs.", c="dimmed", fz="sm"),
+                                        dmc.Space(h="sm"),
+                                        dmc.DatePickerInput(
+                                            id="date-range",
+                                            label="Date range",
+                                            type="range",
+                                            value=[min_date.date().isoformat(), max_date.date().isoformat()],
+                                            minDate=min_date.date().isoformat(),
+                                            maxDate=max_date.date().isoformat(),
+                                            valueFormat="YYYY-MM-DD",
+                                            numberOfColumns=2,
+                                            w="100%",
+                                        ),
+                                        dmc.Space(h="sm"),
+                                        dmc.Select(
+                                            id="tipo-cuero-select",
+                                            label="Leather type",
+                                            value="ALL",
+                                            data=tipo_cuero_options,
+                                            searchable=True,
+                                        ),
+                                        dmc.Space(h="sm"),
+                                        dmc.NumberInput(
+                                            id="min-pzs",
+                                            label="Minimum PZS for family ranking",
+                                            value=100,
+                                            min=0,
+                                        ),
+                                    ],
+                                ),
+                            ),
+                            dmc.GridCol(
+                                span={"base": 12, "md": 9},
+                                children=dmc.Paper(
+                                    className="glass-card",
+                                    withBorder=True,
+                                    radius="lg",
+                                    p="md",
+                                    children=dcc.Graph(id="weekly-area-chart", config={"displayModeBar": False}),
+                                ),
+                            ),
+                        ],
+                    ),
+                    dmc.Space(h="md"),
+                    dmc.SimpleGrid(
+                        cols={"base": 1, "md": 2},
+                        spacing="md",
+                        children=[
+                            dmc.Paper(
+                                className="glass-card",
+                                withBorder=True,
+                                radius="lg",
+                                p="md",
+                                children=dcc.Graph(id="familia-chart", config={"displayModeBar": False}),
+                            ),
+                            dmc.Paper(
+                                className="glass-card",
+                                withBorder=True,
+                                radius="lg",
+                                p="md",
+                                children=dcc.Graph(id="cuero-chart", config={"displayModeBar": False}),
+                            ),
+                        ],
+                    ),
+                    dmc.Space(h="md"),
+                    dmc.Grid(
+                        gutter="md",
+                        children=[
+                            dmc.GridCol(
+                                span={"base": 12, "md": 4},
+                                children=dmc.Paper(
+                                    className="glass-card",
+                                    withBorder=True,
+                                    radius="lg",
+                                    p="md",
+                                    children=[
+                                        dmc.Title("MLP Inference", order=4),
+                                        dmc.Text(
+                                            "Forecast AREA TOTAL (ft2) using FAMILIA, TIPO DE CUERO, and PZS.",
+                                            c="dimmed",
+                                            fz="sm",
+                                        ),
+                                        dmc.Space(h="sm"),
+                                        dmc.Select(
+                                            id="mlp-familia",
+                                            label="Family",
+                                            value=familia_options[0],
+                                            data=familia_options,
+                                            searchable=True,
+                                        ),
+                                        dmc.Space(h="sm"),
+                                        dmc.Select(
+                                            id="mlp-tipo-cuero",
+                                            label="Leather type",
+                                            value=mlp_tipo_cuero_options[0],
+                                            data=mlp_tipo_cuero_options,
+                                            searchable=True,
+                                        ),
+                                        dmc.Space(h="sm"),
+                                        dmc.NumberInput(id="mlp-pzs", label="PZS", value=220, min=1),
+                                        dmc.Space(h="sm"),
+                                        dmc.Button("Run prediction", id="mlp-button", fullWidth=True),
+                                    ],
+                                ),
+                            ),
+                            dmc.GridCol(
+                                span={"base": 12, "md": 8},
+                                children=dmc.Paper(
+                                    className="glass-card",
+                                    withBorder=True,
+                                    radius="lg",
+                                    p="md",
+                                    children=[
+                                        dmc.Title("Prediction Output", order=4),
+                                        dmc.Space(h="sm"),
+                                        dmc.Stack(
+                                            [dmc.Text("Click Run prediction to evaluate the model.")],
+                                            id="mlp-result",
+                                            gap="xs",
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    ),
 )
 
 
@@ -316,7 +449,7 @@ app.layout = dmc.MantineProvider(
 )
 def update_dashboard(date_range, selected_tipo, min_pzs):
     if DF.empty:
-        empty_fig = empty_chart("No data", "Load private dataset to render charts.")
+        empty_fig = empty_chart("No data", "Load a valid dataset to render charts.")
         return ("N/A", "N/A", "N/A", "0 ft2", "0", empty_fig, empty_fig, empty_fig)
 
     if date_range and len(date_range) == 2 and date_range[0] and date_range[1]:
@@ -325,11 +458,11 @@ def update_dashboard(date_range, selected_tipo, min_pzs):
     else:
         start_date, end_date = min_date, max_date
 
-    selected_tipo = selected_tipo or "TODOS"
+    selected_tipo = selected_tipo or "ALL"
     min_pzs = 0 if min_pzs is None else min_pzs
 
     filtered = DF[(DF["FECHA"] >= start_date) & (DF["FECHA"] <= end_date)].copy()
-    if selected_tipo != "TODOS":
+    if selected_tipo != "ALL":
         filtered = filtered[filtered["TIPO DE CUERO"] == selected_tipo].copy()
 
     if filtered.empty:
@@ -339,20 +472,18 @@ def update_dashboard(date_range, selected_tipo, min_pzs):
     total_area = filtered["AREA TOTAL (ft2)"].sum()
     total_pzs = filtered["PZS"].sum()
 
-    weekly = (
-        filtered.groupby("SEMANA")["AREA TOTAL (ft2)"]
-        .sum()
-        .reset_index()
-        .sort_values("SEMANA")
-    )
+    weekly = filtered.groupby("SEMANA", as_index=False)["AREA TOTAL (ft2)"].sum().sort_values("SEMANA")
     weekly_fig = go.Figure(
         data=[
             go.Scatter(
                 x=weekly["SEMANA"],
                 y=weekly["AREA TOTAL (ft2)"],
                 mode="lines+markers",
-                line=dict(color="#0f766e", width=3),
-                marker=dict(size=6),
+                line=dict(color="#0ea5a4", width=3),
+                marker=dict(size=6, color="#f59e0b"),
+                fill="tozeroy",
+                fillcolor="rgba(14,165,164,0.18)",
+                name="Weekly area",
             )
         ]
     )
@@ -360,57 +491,69 @@ def update_dashboard(date_range, selected_tipo, min_pzs):
     weekly_fig.update_xaxes(title="Week")
     weekly_fig.update_yaxes(title="Area (ft2)")
 
-    familia_summary = (
-        filtered.groupby("FAMILIA")
+    family_summary = (
+        filtered.groupby("FAMILIA", as_index=False)
         .agg({"AREA TOTAL (ft2)": "sum", "PZS": "sum"})
-        .reset_index()
     )
-    familia_summary = familia_summary[familia_summary["PZS"] >= min_pzs].copy()
-    familia_summary["RENDIMIENTO"] = familia_summary["AREA TOTAL (ft2)"] / familia_summary["PZS"]
-    familia_summary = familia_summary.replace([float("inf"), -float("inf")], 0).fillna(0)
-    familia_summary = familia_summary.sort_values("RENDIMIENTO", ascending=False)
+    family_summary = family_summary[family_summary["PZS"] >= min_pzs].copy()
+    family_summary["RENDIMIENTO"] = family_summary["AREA TOTAL (ft2)"] / family_summary["PZS"]
+    family_summary = family_summary.replace([float("inf"), -float("inf")], 0).fillna(0)
+    family_summary = family_summary.sort_values("RENDIMIENTO", ascending=False)
 
-    if familia_summary.empty:
-        top_familia = "N/A"
-        top_rend = 0.0
-        familia_fig = empty_chart("Family yield", "No family meets minimum PZS filter.")
+    if family_summary.empty:
+        top_family = "N/A"
+        top_yield = 0.0
+        family_fig = empty_chart("Top Families by Yield", "No family meets the minimum PZS threshold.")
     else:
-        top_familia = str(familia_summary.iloc[0]["FAMILIA"])
-        top_rend = float(familia_summary.iloc[0]["RENDIMIENTO"])
-        top_familias = familia_summary.head(10)
-        familia_fig = go.Figure(
-            data=[go.Bar(x=top_familias["FAMILIA"], y=top_familias["RENDIMIENTO"], marker_color="#14b8a6")]
+        top_family = str(family_summary.iloc[0]["FAMILIA"])
+        top_yield = float(family_summary.iloc[0]["RENDIMIENTO"])
+        top10 = family_summary.head(10)
+        family_fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=top10["FAMILIA"],
+                    y=top10["RENDIMIENTO"],
+                    marker=dict(color="#06b6d4", line=dict(width=1, color="rgba(15,23,42,0.2)")),
+                    name="Yield",
+                )
+            ]
         )
-        style_chart(familia_fig, "Top 10 Families by Yield")
-        familia_fig.update_xaxes(title="Family")
-        familia_fig.update_yaxes(title="Yield (ft2 per piece)")
+        style_chart(family_fig, "Top 10 Families by Yield")
+        family_fig.update_xaxes(title="Family")
+        family_fig.update_yaxes(title="Yield (ft2 per piece)")
 
-    cuero_summary = (
-        filtered.groupby("TIPO DE CUERO")["AREA TOTAL (ft2)"]
+    leather_summary = (
+        filtered.groupby("TIPO DE CUERO", as_index=False)["AREA TOTAL (ft2)"]
         .sum()
-        .reset_index()
         .sort_values("AREA TOTAL (ft2)", ascending=False)
     )
-    top_cuero = str(cuero_summary.iloc[0]["TIPO DE CUERO"])
-    top_cuero_area = float(cuero_summary.iloc[0]["AREA TOTAL (ft2)"])
+    top_leather = str(leather_summary.iloc[0]["TIPO DE CUERO"])
 
-    top_cueros = cuero_summary.head(10)
-    cuero_fig = go.Figure(
-        data=[go.Bar(x=top_cueros["TIPO DE CUERO"], y=top_cueros["AREA TOTAL (ft2)"], marker_color="#0284c7")]
+    leather_top10 = leather_summary.head(10)
+    leather_fig = go.Figure(
+        data=[
+            go.Bar(
+                x=leather_top10["AREA TOTAL (ft2)"],
+                y=leather_top10["TIPO DE CUERO"],
+                orientation="h",
+                marker=dict(color="#3b82f6", line=dict(width=1, color="rgba(15,23,42,0.2)")),
+                name="Area",
+            )
+        ]
     )
-    style_chart(cuero_fig, "Top Leather Types by Area")
-    cuero_fig.update_xaxes(title="Leather type")
-    cuero_fig.update_yaxes(title="Area (ft2)")
+    style_chart(leather_fig, "Top Leather Types by Total Area")
+    leather_fig.update_xaxes(title="Area (ft2)")
+    leather_fig.update_yaxes(title="Leather type", categoryorder="total ascending")
 
     return (
-        top_familia,
-        f"{top_rend:,.2f} ft2/piece",
-        top_cuero,
+        top_family,
+        f"{top_yield:,.2f} ft2/piece",
+        top_leather,
         f"{total_area:,.0f} ft2",
         f"{total_pzs:,.0f}",
         weekly_fig,
-        familia_fig,
-        cuero_fig,
+        family_fig,
+        leather_fig,
     )
 
 
@@ -427,12 +570,12 @@ def update_mlp_prediction(n_clicks, familia, tipo_cuero, pzs):
 
     if predict_area_total is None:
         return [
-            dmc.Text("Could not import MLP module.", c="red", fw=700),
-            dmc.Text(MLP_IMPORT_ERROR or "Unknown error", c="dimmed", fz="sm"),
+            dmc.Text("Could not import mlp_recurtido.py", c="red", fw=700),
+            dmc.Text(MLP_IMPORT_ERROR or "Unknown import error", c="dimmed", fz="sm"),
         ]
 
     if not familia or not tipo_cuero or pzs is None:
-        return [dmc.Text("Select family, leather type, and PZS.", c="red", fw=700)]
+        return [dmc.Text("Please select family, leather type, and PZS.", c="red", fw=700)]
 
     if float(pzs) <= 0:
         return [dmc.Text("PZS must be greater than 0.", c="red", fw=700)]
@@ -443,21 +586,29 @@ def update_mlp_prediction(n_clicks, familia, tipo_cuero, pzs):
         return [dmc.Text(f"Model error: {exc}", c="red", fw=700)]
 
     predicted_area = result["predicted_area"]
-    predicted_rendimiento = result["predicted_rendimiento"]
-    metrics = result["metrics"]
+    predicted_yield = result["predicted_rendimiento"]
+    metrics = result.get("metrics", {})
 
     return [
-        dmc.Text(f"Familia: {familia}", fw=700),
-        dmc.Text(f"Tipo de cuero: {tipo_cuero}"),
+        dmc.Badge("Prediction complete", color="teal", variant="light"),
+        dmc.Text(f"Family: {familia}", fw=700),
+        dmc.Text(f"Leather type: {tipo_cuero}"),
         dmc.Text(f"PZS: {float(pzs):,.0f}"),
-        dmc.Space(h="sm"),
-        dmc.Text(f"Predicted area: {predicted_area:,.2f} ft2", c="teal", fw=700),
-        dmc.Text(f"Predicted yield: {predicted_rendimiento:,.2f} ft2/piece", c="teal", fw=700),
-        dmc.Space(h="sm"),
-        dmc.Text(f"MAE: {metrics['mae']:,.2f} ft2", c="dimmed", fz="sm"),
-        dmc.Text(f"RMSE: {metrics['rmse']:,.2f} ft2", c="dimmed", fz="sm"),
-        dmc.Text(f"R2: {metrics['r2']:.3f}", c="dimmed", fz="sm"),
-        dmc.Text(f"Rows used: {metrics['rows_used']:,.0f}", c="dimmed", fz="sm"),
+        dmc.Space(h="xs"),
+        dmc.Title(f"{predicted_area:,.2f} ft2", order=2, c="teal"),
+        dmc.Text(f"Predicted yield: {predicted_yield:,.2f} ft2/piece", fw=600),
+        dmc.Space(h="xs"),
+        dmc.Divider(),
+        dmc.Text("Model quality snapshot", fz="sm", c="dimmed", fw=600),
+        dmc.Group(
+            gap="md",
+            children=[
+                dmc.Badge(f"MAE {metrics.get('mae', 0):,.2f}", color="gray", variant="outline"),
+                dmc.Badge(f"RMSE {metrics.get('rmse', 0):,.2f}", color="gray", variant="outline"),
+                dmc.Badge(f"R2 {metrics.get('r2', 0):.3f}", color="gray", variant="outline"),
+                dmc.Badge(f"Rows {metrics.get('rows_used', 0):,}", color="gray", variant="outline"),
+            ],
+        ),
     ]
 
 
