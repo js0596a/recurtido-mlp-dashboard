@@ -19,30 +19,8 @@ I originally built this around a retanning workflow, but it is now set up to wor
 - Local Excel upload directly in the app (`.xlsx`)
 - Automatic English/Spanish column mapping (no manual column renaming needed in many cases)
 - KPI dashboard: total area, total pieces, top families, top leather types, weekly trend
-- Weekly yield-mix explainer prototype (week vs previous week decomposition)
 - MLP training from the currently loaded dataset
 - MLP inference from family + leather type + piece count
-
-## New Prototype: Why Yield Dropped
-
-Inside the dashboard, the **Weekly Yield Mix Explainer (Prototype)** section compares a selected week against the previous week and shows:
-
-- **Delta Yield**: total week-over-week yield movement
-- **Mix Effect**: change explained by family composition (which families were processed)
-- **Execution Effect**: change explained by within-family performance
-- **Interaction**: overlap between mix and execution shifts
-
-Visuals included:
-
-- Waterfall chart for decomposition
-- Family share-shift grouped bars
-- Family impact map (share increase vs family yield)
-
-This is useful for cases like:
-
-- previous week processed more high-yield families
-- current week processed mostly low-yield families
-- yield looks lower, and now there is a visual explanation of **why**
 
 ## Exact Copy-Paste (Run Locally)
 
