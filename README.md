@@ -2,6 +2,8 @@
 
 ![Dashboard Preview](docs/dashboard-preview.svg)
 
+![Live Demo GIF](docs/dashboard-demo.gif)
+
 An employer-ready analytics app for **curtido/recurtido** production that combines:
 
 - an interactive Dash dashboard for operations monitoring
@@ -10,6 +12,7 @@ An employer-ready analytics app for **curtido/recurtido** production that combin
 ## Demo Assets
 
 - UI preview: `docs/dashboard-preview.svg`
+- short UI demo GIF: `docs/dashboard-demo.gif`
 - MLP logic diagram: `docs/mlp-pipeline.svg`
 
 ![MLP Pipeline](docs/mlp-pipeline.svg)
@@ -170,6 +173,7 @@ python mlp_recurtido.py predict --familia "XYZ" --tipo-cuero "ABC" --pzs 220
 ├── assets/
 │   └── styles.css
 ├── docs/
+│   ├── dashboard-demo.gif
 │   ├── dashboard-preview.svg
 │   └── mlp-pipeline.svg
 ├── data/
@@ -182,3 +186,4 @@ python mlp_recurtido.py predict --familia "XYZ" --tipo-cuero "ABC" --pzs 220
 
 - Datasets and trained artifacts are intentionally gitignored.
 - Share code/workflow publicly; keep sensitive source data local.
+- Demo visuals/GIF were generated with synthetic sample data (not company data).
