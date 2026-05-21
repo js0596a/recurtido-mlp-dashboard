@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Private data and model artifacts
+/data/*.xlsx
+/data/*.xls
+/artifacts/*
+!/artifacts/.gitkeep
+
+# Local outputs
+*.log
