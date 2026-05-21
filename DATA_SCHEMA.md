@@ -1,6 +1,6 @@
-# Curtido / Recurtido Data Schema
+# Leather Data Schema
 
-The dashboard and model expect an Excel worksheet with these columns:
+The dashboard and model expect these canonical fields:
 
 - `FECHA`
 - `TIPO DE CUERO`
@@ -8,11 +8,23 @@ The dashboard and model expect an Excel worksheet with these columns:
 - `PZS`
 - `AREA TOTAL (ft2)`
 
-## Column expectations
+## English/Spanish Alias Support
+
+You can also use common English names. The pipeline maps aliases automatically.
+
+Examples:
+
+- `FECHA`: `DATE`, `PRODUCTION DATE`, `DAY`
+- `TIPO DE CUERO`: `LEATHER TYPE`, `TYPE OF LEATHER`, `HIDE TYPE`
+- `FAMILIA`: `FAMILY`, `PRODUCT FAMILY`, `CATEGORY`
+- `PZS`: `PIECES`, `PCS`, `QTY`, `QUANTITY`
+- `AREA TOTAL (ft2)`: `TOTAL AREA (ft2)`, `TOTAL AREA`, `AREA FT2`, `SQFT`
+
+## Column Expectations
 
 - `FECHA`
   - date/datetime value
-  - Excel serial dates are also accepted
+  - Excel serial dates are accepted
 - `TIPO DE CUERO`
   - categorical text
 - `FAMILIA`
@@ -22,15 +34,17 @@ The dashboard and model expect an Excel worksheet with these columns:
 - `AREA TOTAL (ft2)`
   - numeric target, must be `> 0`
 
-## Sheet selection logic
+## Sheet Selection Logic
 
-- Preferred sheet name is `RECURTIDO`.
-- If that sheet is not valid, the code auto-detects another sheet containing all required columns.
+Preferred sheet name is `RETANNING`.
 
-## Typical usage
+Fallback behavior:
+- tries `RECURTIDO` next
+- then checks every sheet and picks the first one containing all required columns
+
+## Typical Usage
 
 ```bash
-export RECURTIDO_EXCEL_PATH="/absolute/path/to/your_data.xlsx"
-export RECURTIDO_SHEET_NAME="RECURTIDO"
-python mlp_recurtido.py validate --excel-path "$RECURTIDO_EXCEL_PATH"
+python mlp_recurtido.py validate --excel-path "/absolute/path/to/your_file.xlsx"
+python mlp_recurtido.py train --excel-path "/absolute/path/to/your_file.xlsx"
 ```

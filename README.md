@@ -1,197 +1,98 @@
-# Curtido / Recurtido MLP Dashboard
+# Leather Operations MLP Dashboard
+
+This is a project I built to turn leather production data into something practical: a local dashboard + an MLP model for area forecasting.
+
+The goal is simple:
+- upload your Excel file
+- see clean KPIs and trends
+- train a model on your own data
+- run predictions from the app
+
+I originally built this around a retanning workflow, but it is now set up to work for any leather team with similar production columns.
+
+## Quick Look
 
 ![Dashboard Preview](docs/dashboard-preview.svg)
 
-![Live Demo GIF](docs/dashboard-demo.gif)
+## What It Does
 
-An employer-ready analytics app for **curtido/recurtido** production that combines:
+- Local Excel upload directly in the app (`.xlsx`)
+- Automatic English/Spanish column mapping (no manual column renaming needed in many cases)
+- KPI dashboard: total area, total pieces, top families, top leather types, weekly trend
+- MLP training from the currently loaded dataset
+- MLP inference from family + leather type + piece count
 
-- an interactive Dash dashboard for operations monitoring
-- an MLP neural network for `AREA TOTAL (ft2)` forecasting
-
-## Demo Assets
-
-- UI preview: `docs/dashboard-preview.svg`
-- short UI demo GIF: `docs/dashboard-demo.gif`
-- focused MLP interaction GIF: `docs/mlp-prediction-demo.gif`
-- MLP logic diagram: `docs/mlp-pipeline.svg`
-
-![MLP Pipeline](docs/mlp-pipeline.svg)
-
-## Model Demo (Focused)
-
-The GIF below shows the MLP inference panel before and after running a prediction.
-
-![MLP Prediction Demo](docs/mlp-prediction-demo.gif)
-
-## Project Context: Curtido vs Recurtido
-
-- **Curtido**: broader leather treatment context
-- **Recurtido**: retanning stage used for this app/model scope
-
-This project focuses on recurtido process records and predicts expected production area from key operational features.
-
-## Recruiter Snapshot
-
-- Full-stack data product: model training + inference + interactive dashboard
-- Reusable workflow for any similarly structured Excel dataset
-- Production-focused metrics and interpretable KPIs for decision support
-
-## Results Section (auto-generated from your local run)
-
-Model evaluation metrics are automatically produced during training and saved in:
-
-- `artifacts/recurtido_metrics.joblib`
-
-Metrics tracked:
-
-- MAE
-- RMSE
-- MAPE
-- R2
-- train/test row counts
-
-To display your latest results in terminal:
+## Exact Copy-Paste (Run Locally)
 
 ```bash
-python mlp_recurtido.py train --excel-path "$RECURTIDO_EXCEL_PATH"
-```
-
-The training command prints a JSON metrics summary after fitting.
-
-## How the MLP works (logic)
-
-`mlp_recurtido.py` pipeline:
-
-1. Load Excel data and auto-detect worksheet (prefers `RECURTIDO` first).
-2. Validate required columns:
-   - `TIPO DE CUERO`
-   - `FAMILIA`
-   - `PZS`
-   - `AREA TOTAL (ft2)`
-3. Clean/standardize:
-   - normalize text (`strip`, `upper`, missing token replacement)
-   - coerce numerics
-   - remove invalid rows (`PZS <= 0`, `AREA <= 0`)
-4. Split data into train/test (`80/20`).
-5. Build preprocessing:
-   - OneHotEncoder for categorical features
-   - StandardScaler for `PZS`
-6. Scale target (`AREA TOTAL (ft2)`) with a dedicated scaler.
-7. Train MLP regressor:
-   - Dense(96) -> Dropout(0.10) -> Dense(48) -> Dense(16) -> Dense(1)
-   - optimizer: Adam
-   - loss: MSE
-   - callbacks: EarlyStopping + ReduceLROnPlateau
-8. Evaluate on held-out test set (MAE, RMSE, MAPE, R2).
-9. Save inference artifacts:
-   - model (`.keras`)
-   - preprocessor
-   - target scaler
-   - metrics dictionary
-
-Inference (`predict_area_total`) reuses saved artifacts to return:
-
-- predicted total area (`ft2`)
-- predicted yield (`ft2 / piece`)
-
-## Tech Stack
-
-- Python
-- Dash + Dash Mantine Components
-- Plotly
-- scikit-learn
-- TensorFlow / Keras
-- pandas / NumPy
-
-## Setup
-
-```bash
+git clone https://github.com/js0596a/recurtido-mlp-dashboard.git
+cd recurtido-mlp-dashboard
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+python app.py
 ```
 
-## Data Requirements
+Open: `http://127.0.0.1:8050`
 
-Required columns:
+If port `8050` is busy:
 
+```bash
+python -c "from app import app; app.run(host='127.0.0.1', port=8051, debug=True)"
+```
+
+## How To Use Your Own Data
+
+1. Start the app.
+2. Click **Upload Excel (.xlsx)**.
+3. Pick your file.
+4. Review filters/charts.
+5. Click **Train model from current dataset**.
+6. Run predictions in the MLP panel.
+
+Everything runs locally on your machine.
+
+## Reproducible CLI Workflow
+
+Validate your file:
+
+```bash
+python mlp_recurtido.py validate --excel-path "/absolute/path/to/your_file.xlsx"
+```
+
+Train model artifacts:
+
+```bash
+python mlp_recurtido.py train --excel-path "/absolute/path/to/your_file.xlsx"
+```
+
+Single prediction from terminal:
+
+```bash
+python mlp_recurtido.py predict --familia "FAMILY_A" --tipo-cuero "LEATHER_A" --pzs 220
+```
+
+## Accepted Column Names
+
+Canonical columns used internally:
 - `FECHA`
 - `TIPO DE CUERO`
 - `FAMILIA`
 - `PZS`
 - `AREA TOTAL (ft2)`
 
-See `DATA_SCHEMA.md` for full details.
+The app/model also accept common English equivalents like:
+- `DATE`
+- `LEATHER TYPE`
+- `FAMILY`
+- `PIECES` / `QTY`
+- `TOTAL AREA (ft2)`
 
-## Bring Your Own Data
+See `DATA_SCHEMA.md` for details.
 
-Option 1. Place file in default location:
+## Project Notes
 
-- `data/datosProd.xlsx`
-
-Option 2. Use environment variables:
-
-```bash
-export RECURTIDO_EXCEL_PATH="/absolute/path/to/your_data.xlsx"
-export RECURTIDO_SHEET_NAME="RECURTIDO"
-```
-
-## Validate Dataset
-
-```bash
-python mlp_recurtido.py validate --excel-path "$RECURTIDO_EXCEL_PATH"
-```
-
-## Train Model
-
-```bash
-python mlp_recurtido.py train --excel-path "$RECURTIDO_EXCEL_PATH"
-```
-
-## Run Dashboard
-
-```bash
-python app.py
-```
-
-Open: `http://127.0.0.1:8050`
-
-If 8050 is already in use:
-
-```bash
-python -c "from app import app; app.run(host='127.0.0.1', port=8051, debug=True)"
-```
-
-## Quick CLI Prediction
-
-```bash
-python mlp_recurtido.py predict --familia "XYZ" --tipo-cuero "ABC" --pzs 220
-```
-
-## Repo Structure
-
-```text
-.
-├── app.py
-├── mlp_recurtido.py
-├── DATA_SCHEMA.md
-├── requirements.txt
-├── assets/
-│   └── styles.css
-├── docs/
-│   ├── dashboard-demo.gif
-│   ├── dashboard-preview.svg
-│   ├── mlp-prediction-demo.gif
-│   └── mlp-pipeline.svg
-├── data/
-│   └── .gitkeep
-└── artifacts/
-    └── .gitkeep
-```
-
-## Notes
-
-- Datasets and trained artifacts are intentionally gitignored.
-- Share code/workflow publicly; keep sensitive source data local.
-- Demo visuals/GIF were generated with synthetic sample data (not company data).
+- The repository name still includes `recurtido` for continuity, but UI/docs are now written in English-first terminology (`tanning` / `retanning`).
+- Model/data artifacts are local and gitignored by default.
+- No private company data is included in this repo.
