@@ -26,6 +26,7 @@ ARTIFACT_DIR = BASE_DIR / "artifacts"
 FEATURES = ["TIPO DE CUERO", "FAMILIA", "PZS"]
 TARGET = "AREA TOTAL (ft2)"
 SHEET_NAME = "RECURTIDO"
+REQUIRED_COLUMNS = FEATURES + [TARGET]
 
 
 @dataclass(frozen=True)
@@ -41,12 +42,11 @@ ARTIFACTS = ArtifactPaths()
 
 def clean_recurtido_data(df: pd.DataFrame) -> pd.DataFrame:
     """Standardize the expected fields and drop unusable rows."""
-    required = ["TIPO DE CUERO", "FAMILIA", "PZS", TARGET]
-    missing = [col for col in required if col not in df.columns]
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    cleaned = df[required].copy()
+    cleaned = df[REQUIRED_COLUMNS].copy()
 
     for cat_col in ["TIPO DE CUERO", "FAMILIA"]:
         cleaned[cat_col] = cleaned[cat_col].astype(str).str.strip().str.upper()
@@ -55,7 +55,7 @@ def clean_recurtido_data(df: pd.DataFrame) -> pd.DataFrame:
     cleaned["PZS"] = pd.to_numeric(cleaned["PZS"], errors="coerce")
     cleaned[TARGET] = pd.to_numeric(cleaned[TARGET], errors="coerce")
 
-    cleaned = cleaned.dropna(subset=required)
+    cleaned = cleaned.dropna(subset=REQUIRED_COLUMNS)
     cleaned = cleaned[(cleaned["PZS"] > 0) & (cleaned[TARGET] > 0)].copy()
 
     return cleaned
@@ -95,6 +95,35 @@ def _build_preprocessor() -> ColumnTransformer:
     )
 
 
+def load_training_sheet(excel_path: Path, preferred_sheet: str = SHEET_NAME) -> tuple[pd.DataFrame, str]:
+    """
+    Load the preferred sheet if available, otherwise auto-detect the first sheet
+    containing all required training columns.
+    """
+    try:
+        excel_book = pd.ExcelFile(excel_path)
+    except ImportError as exc:
+        raise ImportError(
+            "Reading .xlsx requires 'openpyxl'. Install dependencies with: pip install -r requirements.txt"
+        ) from exc
+    sheet_names = excel_book.sheet_names
+
+    candidate_sheets = [preferred_sheet] + [name for name in sheet_names if name != preferred_sheet]
+
+    for sheet in candidate_sheets:
+        if sheet not in sheet_names:
+            continue
+        df = pd.read_excel(excel_path, sheet_name=sheet)
+        df.columns = [str(col).strip() for col in df.columns]
+        if all(col in df.columns for col in REQUIRED_COLUMNS):
+            return df, sheet
+
+    raise ValueError(
+        "No worksheet contains the required columns "
+        f"{REQUIRED_COLUMNS}. Available sheets: {sheet_names}"
+    )
+
+
 def train_and_save_model(
     excel_path: Path | str = DEFAULT_EXCEL_PATH,
     sheet_name: str = SHEET_NAME,
@@ -110,7 +139,7 @@ def train_and_save_model(
     tf.keras.utils.set_random_seed(random_state)
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
-    raw_df = pd.read_excel(excel_path, sheet_name=sheet_name)
+    raw_df, selected_sheet = load_training_sheet(excel_path=excel_path, preferred_sheet=sheet_name)
     df = clean_recurtido_data(raw_df)
 
     X = df[FEATURES]
@@ -169,7 +198,7 @@ def train_and_save_model(
         "mape_pct": float(mape),
         "r2": float(r2),
         "epochs_trained": int(len(history.history["loss"])),
-        "sheet_name": sheet_name,
+        "sheet_name": selected_sheet,
         "features": FEATURES,
         "target": TARGET,
     }
@@ -245,8 +274,12 @@ def _cli() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     train_parser = sub.add_parser("train", help="Train model and save artifacts")
-    train_parser.add_argument("--excel-path", default=str(DEFAULT_EXCEL_PATH), help="Path to private Excel file")
-    train_parser.add_argument("--sheet", default=SHEET_NAME, help="Excel sheet name")
+    train_parser.add_argument("--excel-path", default=str(DEFAULT_EXCEL_PATH), help="Path to local Excel file")
+    train_parser.add_argument("--sheet", default=SHEET_NAME, help="Preferred sheet name (auto-detect fallback enabled)")
+
+    validate_parser = sub.add_parser("validate", help="Validate that dataset has required columns")
+    validate_parser.add_argument("--excel-path", default=str(DEFAULT_EXCEL_PATH), help="Path to local Excel file")
+    validate_parser.add_argument("--sheet", default=SHEET_NAME, help="Preferred sheet name")
 
     pred_parser = sub.add_parser("predict", help="Run one prediction with saved artifacts")
     pred_parser.add_argument("--familia", required=True)
@@ -258,6 +291,20 @@ def _cli() -> None:
     if args.command == "train":
         metrics = train_and_save_model(excel_path=args.excel_path, sheet_name=args.sheet)
         _print_metrics(metrics)
+    elif args.command == "validate":
+        dataset, selected_sheet = load_training_sheet(excel_path=Path(args.excel_path), preferred_sheet=args.sheet)
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "selected_sheet": selected_sheet,
+                    "rows": int(len(dataset)),
+                    "columns": [str(col).strip() for col in dataset.columns],
+                    "required_columns": REQUIRED_COLUMNS,
+                },
+                indent=2,
+            )
+        )
     elif args.command == "predict":
         result = predict_area_total(familia=args.familia, tipo_cuero=args.tipo_cuero, pzs=args.pzs)
         print(json.dumps(result, indent=2))

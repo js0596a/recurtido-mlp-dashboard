@@ -19,7 +19,9 @@ except Exception as exc:
 
 BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = Path(os.getenv("RECURTIDO_EXCEL_PATH", BASE_DIR / "data" / "datosProd.xlsx"))
+PREFERRED_SHEET = os.getenv("RECURTIDO_SHEET_NAME", "RECURTIDO")
 REPO_URL = "https://github.com/js0596a/recurtido-mlp-dashboard"
+REQUIRED_DASHBOARD_COLUMNS = ["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)"]
 
 
 def fix_excel_date(column: pd.Series) -> pd.Series:
@@ -36,19 +38,42 @@ def fix_excel_date(column: pd.Series) -> pd.Series:
 def load_dashboard_data(excel_path: Path) -> pd.DataFrame:
     if not excel_path.exists():
         raise FileNotFoundError(
-            f"Private Excel file not found at {excel_path}. "
+            f"Excel file not found at {excel_path}. "
             "Set RECURTIDO_EXCEL_PATH to your local dataset path."
         )
 
-    raw_df = pd.read_excel(excel_path, sheet_name="RECURTIDO")
-    raw_df.columns = raw_df.columns.str.strip()
+    try:
+        excel_book = pd.ExcelFile(excel_path)
+    except ImportError as exc:
+        raise ImportError(
+            "Reading .xlsx requires 'openpyxl'. Install dependencies with: pip install -r requirements.txt"
+        ) from exc
+    sheet_names = excel_book.sheet_names
+    candidate_sheets = [PREFERRED_SHEET] + [name for name in sheet_names if name != PREFERRED_SHEET]
 
-    required = ["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)"]
-    missing = [col for col in required if col not in raw_df.columns]
+    selected_sheet = None
+    raw_df = None
+    for sheet in candidate_sheets:
+        if sheet not in sheet_names:
+            continue
+        candidate_df = pd.read_excel(excel_path, sheet_name=sheet)
+        candidate_df.columns = candidate_df.columns.str.strip()
+        if all(col in candidate_df.columns for col in REQUIRED_DASHBOARD_COLUMNS):
+            selected_sheet = sheet
+            raw_df = candidate_df
+            break
+
+    if raw_df is None:
+        raise ValueError(
+            "No worksheet contains required columns "
+            f"{REQUIRED_DASHBOARD_COLUMNS}. Available sheets: {sheet_names}"
+        )
+
+    missing = [col for col in REQUIRED_DASHBOARD_COLUMNS if col not in raw_df.columns]
     if missing:
-        raise ValueError(f"Missing columns in RECURTIDO sheet: {missing}")
+        raise ValueError(f"Missing columns in selected sheet '{selected_sheet}': {missing}")
 
-    df = raw_df[required].copy()
+    df = raw_df[REQUIRED_DASHBOARD_COLUMNS].copy()
     df["FECHA"] = fix_excel_date(df["FECHA"])
 
     df["TIPO DE CUERO"] = df["TIPO DE CUERO"].astype(str).str.strip().str.upper()
@@ -65,6 +90,7 @@ def load_dashboard_data(excel_path: Path) -> pd.DataFrame:
     df = df[(df["PZS"] > 0) & (df["AREA TOTAL (ft2)"] > 0)].copy()
     df["SEMANA"] = df["FECHA"].dt.to_period("W").dt.start_time
 
+    df.attrs["selected_sheet"] = selected_sheet
     return df
 
 
@@ -105,9 +131,11 @@ def style_chart(fig: go.Figure, title: str) -> go.Figure:
 
 try:
     DF = load_dashboard_data(EXCEL_PATH)
+    SELECTED_SHEET = DF.attrs.get("selected_sheet", PREFERRED_SHEET)
     DATA_LOAD_ERROR = None
 except Exception as exc:
     DF = pd.DataFrame(columns=["FECHA", "TIPO DE CUERO", "FAMILIA", "PZS", "AREA TOTAL (ft2)", "SEMANA"])
+    SELECTED_SHEET = None
     DATA_LOAD_ERROR = str(exc)
 
 
@@ -144,7 +172,7 @@ app.layout = dmc.MantineProvider(
                             children=[
                                 dmc.Title("Recurtido Analytics + MLP", order=2),
                                 dmc.Text(
-                                    "Private operational dashboard with production KPIs and forecast model.",
+                                    "Production analytics dashboard with an MLP forecast workflow.",
                                     c="dimmed",
                                 ),
                             ],
@@ -154,13 +182,9 @@ app.layout = dmc.MantineProvider(
                 ),
                 dmc.Space(h="md"),
                 dmc.Alert(
-                    "This app uses private company data locally only. Raw data is not committed to GitHub.",
-                    color="yellow",
-                    variant="light",
-                ),
-                dmc.Space(h="sm"),
-                dmc.Alert(
-                    DATA_LOAD_ERROR if DATA_LOAD_ERROR else f"Loaded dataset from: {EXCEL_PATH}",
+                    DATA_LOAD_ERROR
+                    if DATA_LOAD_ERROR
+                    else f"Loaded dataset from: {EXCEL_PATH} (sheet: {SELECTED_SHEET})",
                     color="red" if DATA_LOAD_ERROR else "teal",
                     variant="light",
                 ),
