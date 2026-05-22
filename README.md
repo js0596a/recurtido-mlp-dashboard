@@ -99,17 +99,41 @@ See `DATA_SCHEMA.md` for details.
 
 ## How the MLP works with your data
 
-Short version:
+When you upload your file and click train, I use your historical rows to learn this relationship:
+- Inputs: `TIPO DE CUERO`, `FAMILIA`, `PZS`
+- Target: `AREA TOTAL (ft2)`
 
-1. You upload your Excel file.
-2. I map your column names automatically (Spanish or English) to the required model fields.
-3. I clean bad rows (missing values, non-numeric values, or rows where `PZS <= 0` or `AREA <= 0`).
-4. I train the MLP to learn this relationship:
-Inputs: `TIPO DE CUERO`, `FAMILIA`, `PZS`
-Target: `AREA TOTAL (ft2)`
-5. I evaluate model quality with `MAE`, `RMSE`, `MAPE`, and `R2`.
-6. I save the model and preprocessors in `artifacts/` so you can reuse them.
-7. For new inputs (`familia`, `tipo de cuero`, `pzs`), I predict area in `ft2` and compute yield:
+Before training, I automatically map Spanish/English column names, clean invalid rows, one-hot encode categorical fields, and scale numeric values so the network sees stable inputs.
+
+### Architecture (plain English)
+
+1. `Dense(96, relu)`
+First hidden layer. It starts learning broad interactions between leather type, family, and piece count.
+
+2. `Dropout(0.10)`
+During training, it randomly drops 10% of neurons each step, which helps reduce overfitting.
+
+3. `Dense(48, relu)`
+Second hidden layer. It refines the strongest patterns from layer 1.
+
+4. `Dense(16, relu)`
+Third hidden layer. It compresses the signal into a smaller, more focused representation.
+
+5. `Dense(1)`
+Output layer. It returns one number: predicted area (then converted back to real `ft2` units).
+
+### Training behavior
+
+- Optimizer: Adam (`learning_rate=0.001`)
+- Loss: Mean Squared Error (`mse`)
+- Validation split: 20% of training subset
+- `EarlyStopping`: stops when validation loss no longer improves
+- `ReduceLROnPlateau`: lowers learning rate when progress stalls
+
+### Prediction output
+
+For any new case (`familia`, `tipo de cuero`, `pzs`), the app applies the same preprocessing, predicts area in `ft2`, and computes:
+
 `predicted_yield = predicted_area / pzs`
 
-In simple terms: the model learns from your own historical production data and returns practical forecasts in the same business units your team uses.
+In short, the MLP is a compact feed-forward network that learns from your own production history and gives practical area/yield forecasts in business-friendly units.
