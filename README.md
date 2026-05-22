@@ -99,48 +99,17 @@ See `DATA_SCHEMA.md` for details.
 
 ## How the MLP works with your data
 
-When you upload your own Excel file and click train, this is what happens under the hood.
+Short version:
 
-1. I treat each row as one historical production example.
-The model learns this relationship:
-- Inputs: `TIPO DE CUERO`, `FAMILIA`, `PZS`
-- Target: `AREA TOTAL (ft2)`
-
-2. I normalize column names automatically.
-You can use Spanish or English headers (`PIEZAS`, `QTY`, `FAMILY`, `LEATHER TYPE`, etc.) and the app maps them to the model's canonical columns.
-
-3. I clean the data before training.
-Rows are removed if required values are missing, non-numeric, or not usable for learning (for example `PZS <= 0` or `AREA TOTAL (ft2) <= 0`).
-
-4. I convert inputs into model-ready features.
-`TIPO DE CUERO` and `FAMILIA` are one-hot encoded, and `PZS` is scaled with `StandardScaler`.
-
-5. I scale the target area for training stability.
-`AREA TOTAL (ft2)` is scaled during training and converted back to real `ft2` units after prediction.
-
-6. I train a feed-forward MLP for regression.
-Network architecture:
-- Dense(96, ReLU)
-- Dropout(0.10)
-- Dense(48, ReLU)
-- Dense(16, ReLU)
-- Dense(1) output
-
-Training setup:
-- train/test split
-- early stopping
-- learning-rate reduction on validation plateau
-
-7. I evaluate and save quality metrics.
-After training, the app stores `MAE`, `RMSE`, `MAPE`, and `R2`, along with train/test row counts.
-
-8. I save all artifacts locally.
-Model, preprocessors, scaler, and metrics are written to `artifacts/` so you can predict later without retraining.
-
-9. For a new case, I run the same preprocessing pipeline.
-Given `familia`, `tipo de cuero`, and `pzs`, the model predicts area and returns it in `ft2`.
-
-10. Yield is calculated from the predicted area.
+1. You upload your Excel file.
+2. I map your column names automatically (Spanish or English) to the required model fields.
+3. I clean bad rows (missing values, non-numeric values, or rows where `PZS <= 0` or `AREA <= 0`).
+4. I train the MLP to learn this relationship:
+Inputs: `TIPO DE CUERO`, `FAMILIA`, `PZS`
+Target: `AREA TOTAL (ft2)`
+5. I evaluate model quality with `MAE`, `RMSE`, `MAPE`, and `R2`.
+6. I save the model and preprocessors in `artifacts/` so you can reuse them.
+7. For new inputs (`familia`, `tipo de cuero`, `pzs`), I predict area in `ft2` and compute yield:
 `predicted_yield = predicted_area / pzs`
 
-In short, the model learns from your own production history and gives you forecasts in the same units your team already uses.
+In simple terms: the model learns from your own historical production data and returns practical forecasts in the same business units your team uses.
