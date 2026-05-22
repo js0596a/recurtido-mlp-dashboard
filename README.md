@@ -96,3 +96,52 @@ See `DATA_SCHEMA.md` for details.
 - The repository name still includes `recurtido` for continuity, but UI/docs are now written in English-first terminology (`tanning` / `retanning`).
 - Model/data artifacts are local and gitignored by default.
 - No private company data is included in this repo.
+
+## How The MLP Works With Your Company Data
+
+This section explains exactly what happens after you upload your own Excel file and train the model.
+
+1. You provide the training examples.
+Each row in your dataset is treated as one historical production example, with:
+- inputs: `TIPO DE CUERO`, `FAMILIA`, `PZS`
+- target to learn: `AREA TOTAL (ft2)`
+
+2. Column names are standardized automatically.
+The app accepts Spanish and common English aliases (`PIEZAS`, `QTY`, `FAMILY`, `LEATHER TYPE`, etc.) and maps them to the canonical columns expected by the model.
+
+3. Data is cleaned before training.
+Rows are removed if required fields are missing, non-numeric, or invalid for learning (for example `PZS <= 0` or `AREA TOTAL (ft2) <= 0`).
+
+4. Inputs are converted into machine-learning features.
+`TIPO DE CUERO` and `FAMILIA` are one-hot encoded, and `PZS` is standardized with `StandardScaler`, so the neural network receives consistent numeric inputs.
+
+5. The target area is also scaled.
+`AREA TOTAL (ft2)` is standardized during training, then converted back to real units (`ft2`) after prediction.
+
+6. The neural network (MLP) is trained.
+Architecture:
+- Dense(96, ReLU)
+- Dropout(0.10)
+- Dense(48, ReLU)
+- Dense(16, ReLU)
+- Dense(1) output for area regression
+
+Training uses:
+- train/test split
+- early stopping (to avoid overfitting)
+- learning-rate reduction on validation plateau
+
+7. Model quality is measured and saved.
+After training, the app reports `MAE`, `RMSE`, `MAPE`, and `R2`, plus row counts used for train/test.
+
+8. Artifacts are stored locally for reuse.
+The trained model, preprocessors, scaler, and metrics are saved under `artifacts/`, so predictions can be made later without retraining.
+
+9. Prediction flow for new cases.
+When a user enters `familia`, `tipo de cuero`, and `pzs`, the same preprocessing pipeline is applied, the model predicts area, and the result is converted back to `ft2`.
+
+10. Yield is calculated from the prediction.
+The dashboard computes:
+`predicted_yield = predicted_area / pzs`
+
+So the MLP is learning a production pattern from your own historical data and returning a practical forecast in the same business units your team uses.
