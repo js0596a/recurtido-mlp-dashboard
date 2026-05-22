@@ -137,3 +137,23 @@ For any new case (`familia`, `tipo de cuero`, `pzs`), the app applies the same p
 `predicted_yield = predicted_area / pzs`
 
 In short, the MLP is a compact feed-forward network that learns from your own production history and gives practical area/yield forecasts in business-friendly units.
+
+## How to interpret model metrics (non-technical)
+
+After training, you will see `MAE`, `RMSE`, `MAPE`, and `R2`. Here is the simple way to read them:
+
+- `MAE` (Mean Absolute Error): average absolute error in `ft2`. Lower is better.
+- `RMSE` (Root Mean Squared Error): similar to MAE, but penalizes large misses more. Lower is better.
+- `MAPE` (% error): average percentage error. Lower is better.
+- `R2` (fit quality): how well the model explains variation in area. Higher is better (closer to `1.0`).
+
+Quick practical interpretation:
+
+- If `MAE` and `RMSE` are both going down, the model is improving.
+- If `RMSE` is much higher than `MAE`, there are likely some large outlier mistakes.
+- If `MAPE` is low enough for your business tolerance, predictions are usually usable for planning.
+- If `R2` is low, the model may need more data, cleaner inputs, or additional features.
+
+Best way to judge quality:
+
+Use your own business threshold. Example: if your team can tolerate around `+/- 8%` error on planning lots, then compare that threshold against `MAPE` and recent real vs predicted results.
